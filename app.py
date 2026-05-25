@@ -223,9 +223,21 @@ if results:
 
     ranking_df = pd.DataFrame(rows)
 
-    st.caption("Clicca una riga per vedere il dettaglio della rotazione")
+    best_pos = 1  # results gia' ordinati: il migliore e' il primo
+
+    def _highlight_best(row):
+        if row["Pos"] == best_pos:
+            return ["background-color: #B8F2C9; color: #0B3D2E; font-weight: 700"] * len(row)
+        return [""] * len(row)
+
+    styled_ranking = ranking_df.style.apply(_highlight_best, axis=1)
+
+    st.caption(
+        f"Riga verde = rotazione piu' bilanciata (#{best_pos}). "
+        "Clicca un'altra riga per vedere il dettaglio."
+    )
     event = st.dataframe(
-        ranking_df,
+        styled_ranking,
         use_container_width=True,
         height=380,
         hide_index=True,
@@ -299,11 +311,11 @@ if results:
         "Fattore riserva": f"{top['riserva_factor']:.3f}",
     }
 
-    pdf_bytes = build_pdf_report(summary, ranking_df, results[:top_n], selected_pos=selected_pos)
+    pdf_bytes = build_pdf_report(summary, ranking_df, [top], selected_pos=1)
     st.download_button(
-        f"Esporta PDF completo ({len(results[:top_n])} soluzioni)",
+        f"Esporta PDF rotazione #{selected_pos} (N={top['N']} K={top['K']})",
         data=pdf_bytes,
-        file_name=f"rotazioni_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
+        file_name=f"rotazione_{top['N']}x{top['K']}_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
         mime="application/pdf",
         use_container_width=True,
     )
