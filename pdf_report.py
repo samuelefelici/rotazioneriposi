@@ -98,7 +98,7 @@ def _pattern_table(pattern):
     n_rows = len(data)
     n_cols = len(header)
 
-    col_widths = [22] + [16] * 7
+    col_widths = [38] + [42] * 7
     t = Table(data, colWidths=col_widths, repeatRows=1)
 
     style = [
@@ -109,7 +109,7 @@ def _pattern_table(pattern):
         ("BACKGROUND", (0, 1), (0, -1), C_PRIMARY),
         ("TEXTCOLOR", (0, 1), (0, -1), colors.white),
         ("FONTNAME", (0, 1), (0, -1), "Helvetica-Bold"),
-        ("FONTSIZE", (0, 0), (-1, -1), 7.5),
+        ("FONTSIZE", (0, 0), (-1, -1), 8.5),
         ("ALIGN", (0, 0), (-1, -1), "CENTER"),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         ("GRID", (0, 0), (-1, -1), 0.3, C_GRID),
@@ -295,28 +295,30 @@ def build_pdf_report(
     story.append(Paragraph("Classifica soluzioni", h2))
     story.append(_ranking_table(ranking_df, highlight_pos=selected_pos))
 
-    # One page per solution
+    # One section per solution (pattern can flow across pages if needed)
     for pos, result in enumerate(results, start=1):
         story.append(PageBreak())
         story.append(_solution_header(pos, result, styles))
         story.append(Spacer(1, 10))
 
-        body_data = [[
+        top_data = [[
             _stats_table(result, pos),
             _coverage_table(result),
-            _pattern_table(result["pattern"]),
         ]]
-        body = Table(body_data, colWidths=[210, 300, 200])
-        body.setStyle(
+        top_row = Table(top_data, colWidths=[220, 310])
+        top_row.setStyle(
             TableStyle(
                 [
                     ("VALIGN", (0, 0), (-1, -1), "TOP"),
                     ("LEFTPADDING", (0, 0), (-1, -1), 0),
-                    ("RIGHTPADDING", (0, 0), (-1, -1), 10),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 12),
                 ]
             )
         )
-        story.append(body)
+        story.append(top_row)
+        story.append(Spacer(1, 10))
+        story.append(Paragraph("Pattern settimanale", h2))
+        story.append(_pattern_table(result["pattern"]))
 
     doc.build(story)
     pdf_bytes = buffer.getvalue()
