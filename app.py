@@ -299,11 +299,11 @@ if results:
         "Fattore riserva": f"{top['riserva_factor']:.3f}",
     }
 
-    pdf_bytes = build_pdf_report(summary, ranking_df, pattern_df)
+    pdf_bytes = build_pdf_report(summary, ranking_df, results[:top_n], selected_pos=selected_pos)
     st.download_button(
-        "Esporta dettaglio in PDF",
+        f"Esporta PDF completo ({len(results[:top_n])} soluzioni)",
         data=pdf_bytes,
-        file_name=f"rotazione_{top['N']}x{top['K']}_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
+        file_name=f"rotazioni_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
         mime="application/pdf",
         use_container_width=True,
     )
