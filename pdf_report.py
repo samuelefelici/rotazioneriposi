@@ -7,6 +7,7 @@ from reportlab.lib.pagesizes import A3
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.platypus import (
+    KeepInFrame,
     PageBreak,
     Paragraph,
     SimpleDocTemplate,
@@ -295,32 +296,49 @@ def build_pdf_report(
     story.append(Paragraph("Classifica soluzioni", h2))
     story.append(_ranking_table(ranking_df, highlight_pos=selected_pos))
 
-    # One section per solution (all in one A3 portrait page when single rotation)
+    # A3 portrait usable area
+    page_w, page_h = A3
+    inner_w = page_w - 40 * mm
+    inner_h = page_h - 32 * mm
+
+    # Each solution forced to a single A3 page via KeepInFrame(shrink)
     for pos, result in enumerate(results, start=1):
-        if pos > 1:
-            story.append(PageBreak())
-        story.append(Spacer(1, 14))
-        story.append(_solution_header(pos, result, styles))
-        story.append(Spacer(1, 8))
+        story.append(PageBreak())
+
+        section = [
+            _solution_header(pos, result, styles),
+            Spacer(1, 10),
+        ]
 
         top_data = [[
             _stats_table(result, pos),
             _coverage_table(result),
         ]]
-        top_row = Table(top_data, colWidths=[220, 310])
+        top_row = Table(top_data, colWidths=[260, 360])
         top_row.setStyle(
             TableStyle(
                 [
                     ("VALIGN", (0, 0), (-1, -1), "TOP"),
                     ("LEFTPADDING", (0, 0), (-1, -1), 0),
-                    ("RIGHTPADDING", (0, 0), (-1, -1), 12),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 14),
                 ]
             )
         )
-        story.append(top_row)
-        story.append(Spacer(1, 10))
-        story.append(Paragraph("Pattern settimanale", h2))
-        story.append(_pattern_table(result["pattern"]))
+        section.append(top_row)
+        section.append(Spacer(1, 12))
+        section.append(Paragraph("Pattern settimanale", h2))
+        section.append(_pattern_table(result["pattern"]))
+
+        story.append(
+            KeepInFrame(
+                inner_w,
+                inner_h,
+                section,
+                mode="shrink",
+                hAlign="LEFT",
+                vAlign="TOP",
+            )
+        )
 
     doc.build(story)
     pdf_bytes = buffer.getvalue()
