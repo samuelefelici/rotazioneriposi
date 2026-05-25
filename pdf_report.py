@@ -3,7 +3,7 @@ from typing import Dict, List
 
 import pandas as pd
 from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4, landscape
+from reportlab.lib.pagesizes import A3
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.platypus import (
@@ -261,13 +261,13 @@ def build_pdf_report(
     buffer = BytesIO()
     doc = SimpleDocTemplate(
         buffer,
-        pagesize=landscape(A4),
+        pagesize=A3,
         title="Report Rotazione Riposi",
         author="Rotazione Riposi Streamlit",
-        leftMargin=18 * mm,
-        rightMargin=18 * mm,
-        topMargin=14 * mm,
-        bottomMargin=14 * mm,
+        leftMargin=20 * mm,
+        rightMargin=20 * mm,
+        topMargin=16 * mm,
+        bottomMargin=16 * mm,
     )
 
     styles = getSampleStyleSheet()
@@ -295,11 +295,13 @@ def build_pdf_report(
     story.append(Paragraph("Classifica soluzioni", h2))
     story.append(_ranking_table(ranking_df, highlight_pos=selected_pos))
 
-    # One section per solution (pattern can flow across pages if needed)
+    # One section per solution (all in one A3 portrait page when single rotation)
     for pos, result in enumerate(results, start=1):
-        story.append(PageBreak())
+        if pos > 1:
+            story.append(PageBreak())
+        story.append(Spacer(1, 14))
         story.append(_solution_header(pos, result, styles))
-        story.append(Spacer(1, 10))
+        story.append(Spacer(1, 8))
 
         top_data = [[
             _stats_table(result, pos),
