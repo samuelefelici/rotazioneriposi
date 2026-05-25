@@ -22,7 +22,22 @@ st.markdown(
     }
     .hero h1 { margin: 0; font-size: 2.1rem; letter-spacing: 0.5px; }
     .hero p { margin-top: 8px; font-size: 1.05rem; max-width: 920px; }
-    .small-note { font-size: 0.9rem; opacity: 0.85; }
+    .ticker {
+        background: #0E1117;
+        color: #C8FACC;
+        font-family: 'JetBrains Mono', 'Consolas', monospace;
+        font-size: 0.85rem;
+        padding: 12px 14px;
+        border-radius: 10px;
+        height: 230px;
+        overflow-y: auto;
+        border: 1px solid #1E847F;
+        box-shadow: inset 0 0 14px rgba(30, 132, 127, 0.25);
+    }
+    .ticker .ln { display:block; white-space: nowrap; }
+    .ticker .ok { color:#7CFFB2; }
+    .ticker .inf { color:#FF8C8C; }
+    .ticker .skip { color:#FFD580; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -33,10 +48,9 @@ st.markdown(
     <div class="hero">
       <h1>Rotazione Riposi Planner</h1>
       <p>
-        Inserisci domanda e vincoli, avvia la ricerca su (N, K), osserva in tempo reale come si muove
-        l'algoritmo CP-SAT e confronta le migliori configurazioni con export PDF professionale.
+        Inserisci domanda e vincoli, avvia la ricerca su (N, K), guarda l'algoritmo CP-SAT
+        scorrere in tempo reale e scegli la rotazione migliore dalla classifica per vedere il dettaglio completo.
       </p>
-      <p class="small-note">Obiettivo: minimizzare picco eccedenza e riserva totale, mantenendo vincoli operativi.</p>
     </div>
     """,
     unsafe_allow_html=True,
@@ -90,59 +104,41 @@ run = st.button("Avvia calcolatore", type="primary", use_container_width=True)
 
 if "last_results" not in st.session_state:
     st.session_state.last_results = []
-    st.session_state.last_attempts = []
+    st.session_state.selected_pos = 1
 
 if run:
     if n_min > n_max or k_min > k_max:
         st.error("Range non valido: controlla N/K min-max.")
         st.stop()
 
-    params = SearchParams(
-        riposi_anno_target=riposi_anno_target,
-        tol_riposi=tol_riposi,
-        domanda_feriali=domanda_feriali,
-        domanda_domenica=domanda_domenica,
-        max_consec=max_consec,
-        forza_feriale_reale=forza_feriale_reale,
-        riserva_domenica_pct=riserva_domenica_pct,
-        balance_weekday=balance_weekday,
-        n_min=n_min,
-        n_max=n_max,
-        k_min=k_min,
-        k_max=k_max,
-        timeout_per_attempt=timeout_per_attempt,
-    )
-
     total = (n_max - n_min + 1) * (k_max - k_min + 1)
     done = 0
 
-    st.subheader("Esecuzione algoritmo")
+    st.subheader("Algoritmo in esecuzione")
     progress = st.progress(0)
     metric_row = st.columns(4)
-    metric_row[0].metric("Tentativi", 0)
-    metric_row[1].metric("Fattibili", 0)
-    metric_row[2].metric("Miglior picco", "-")
-    metric_row[3].metric("Miglior totale", "-")
+    m_try = metric_row[0].empty()
+    m_ok = metric_row[1].empty()
+    m_peak = metric_row[2].empty()
+    m_tot = metric_row[3].empty()
+    m_try.metric("Tentativi", "0")
+    m_ok.metric("Fattibili", 0)
+    m_peak.metric("Miglior picco", "-")
+    m_tot.metric("Miglior totale", "-")
 
-    live_log = st.empty()
-    live_data = []
+    ticker_box = st.empty()
+    ticker_lines = []
 
     results = []
-    attempts = []
 
     for k in range(k_min, k_max + 1):
         for n in range(n_min, n_max + 1):
             done += 1
 
             if k * n < domanda_feriali:
-                rec = {
-                    "N": n,
-                    "K": k,
-                    "status": "SKIP",
-                    "msg": "Capacita insufficiente sui feriali",
-                }
-                attempts.append(rec)
-                live_data.append(rec)
+                ticker_lines.append(
+                    f"<span class='ln skip'>· N={n:>2} K={k} SKIP (capacita feriali insufficiente)</span>"
+                )
             else:
                 single_params = SearchParams(
                     riposi_anno_target=riposi_anno_target,
@@ -159,43 +155,35 @@ if run:
                     k_max=k,
                     timeout_per_attempt=timeout_per_attempt,
                 )
-                partial_results, partial_attempts = search_solutions(single_params)
-                attempts.extend(partial_attempts)
+                partial_results, _ = search_solutions(single_params)
 
                 if partial_results:
-                    results.extend(partial_results)
-                    best_now = sorted(
-                        results,
-                        key=lambda r: (
-                            r["max_extra"],
-                            r["total_extra"],
-                            abs(r["delta_riposi"]),
-                            r["tot_autisti"],
-                            r["N"],
-                        ),
-                    )[0]
-                    live_data.append(
-                        {
-                            "N": n,
-                            "K": k,
-                            "status": "OK",
-                            "max_extra": partial_results[0]["max_extra"],
-                            "total_extra": partial_results[0]["total_extra"],
-                            "best_now": f"N={best_now['N']} K={best_now['K']}",
-                        }
+                    r = partial_results[0]
+                    results.append(r)
+                    ticker_lines.append(
+                        f"<span class='ln ok'>✓ N={n:>2} K={k} | picco={r['max_extra']:>2} "
+                        f"tot={r['total_extra']:>3} R/anno={r['riposi_anno']:.2f} "
+                        f"drv={r['tot_autisti']:>3}</span>"
                     )
                 else:
-                    live_data.append({"N": n, "K": k, "status": "INF", "msg": "Infattibile o timeout"})
+                    ticker_lines.append(
+                        f"<span class='ln inf'>× N={n:>2} K={k} infattibile/timeout</span>"
+                    )
 
             progress.progress(done / total)
             fattibili = len(results)
             best_peak = min((r["max_extra"] for r in results), default="-")
             best_total = min((r["total_extra"] for r in results), default="-")
-            metric_row[0].metric("Tentativi", done)
-            metric_row[1].metric("Fattibili", fattibili)
-            metric_row[2].metric("Miglior picco", best_peak)
-            metric_row[3].metric("Miglior totale", best_total)
-            live_log.dataframe(pd.DataFrame(live_data[-40:]), use_container_width=True, height=320)
+            m_try.metric("Tentativi", f"{done}/{total}")
+            m_ok.metric("Fattibili", fattibili)
+            m_peak.metric("Miglior picco", best_peak)
+            m_tot.metric("Miglior totale", best_total)
+
+            visible = ticker_lines[-14:]
+            ticker_box.markdown(
+                f"<div class='ticker'>{''.join(visible)}</div>",
+                unsafe_allow_html=True,
+            )
 
     results = sorted(
         results,
@@ -209,13 +197,14 @@ if run:
     )
 
     st.session_state.last_results = results
-    st.session_state.last_attempts = attempts
+    st.session_state.selected_pos = 1
     st.success(f"Ricerca completata: {len(results)} configurazioni fattibili su {total} tentativi.")
 
 results = st.session_state.last_results
 
 if results:
-    st.subheader("Classifica migliori configurazioni")
+    st.subheader("Migliori rotazioni")
+
     rows = []
     for idx, r in enumerate(results[:top_n], start=1):
         rows.append(
@@ -226,31 +215,52 @@ if results:
                 "Driver": r["tot_autisti"],
                 "T": r["T"],
                 "Riposi/anno": round(r["riposi_anno"], 2),
-                "Delta riposi": round(r["delta_riposi"], 2),
                 "Picco eccedenza": r["max_extra"],
                 "Totale eccedenza": r["total_extra"],
-                "Dom base": r["dom_domenica_base"],
                 "Dom eff": r["dom_domenica_eff"],
-                "Fattore riserva": round(r["riserva_factor"], 3),
             }
         )
 
     ranking_df = pd.DataFrame(rows)
-    st.dataframe(ranking_df, use_container_width=True, height=360)
 
-    top = results[0]
-    st.subheader("Dettaglio soluzione top")
+    st.caption("Clicca una riga per vedere il dettaglio della rotazione")
+    event = st.dataframe(
+        ranking_df,
+        use_container_width=True,
+        height=380,
+        hide_index=True,
+        on_select="rerun",
+        selection_mode="single-row",
+    )
+
+    selected_pos = st.session_state.selected_pos
+    if event is not None and getattr(event, "selection", None):
+        rows_sel = event.selection.get("rows") if isinstance(event.selection, dict) else getattr(event.selection, "rows", None)
+        if rows_sel:
+            selected_pos = rows_sel[0] + 1
+            st.session_state.selected_pos = selected_pos
+
+    if selected_pos > len(results):
+        selected_pos = 1
+        st.session_state.selected_pos = 1
+
+    top = results[selected_pos - 1]
+
+    st.markdown(f"### Dettaglio rotazione #{selected_pos} — N={top['N']} · K={top['K']}")
+
     info_cols = st.columns(6)
-    info_cols[0].metric("N", top["N"])
-    info_cols[1].metric("K", top["K"])
-    info_cols[2].metric("Driver", top["tot_autisti"])
+    info_cols[0].metric("Driver", top["tot_autisti"])
+    info_cols[1].metric("Riposi/ciclo", top["T"])
+    info_cols[2].metric("Riposi/anno", f"{top['riposi_anno']:.2f}")
     info_cols[3].metric("Picco eccedenza", top["max_extra"])
     info_cols[4].metric("Totale eccedenza", top["total_extra"])
-    info_cols[5].metric("Dom eff", top["dom_domenica_eff"])
+    info_cols[5].metric("Dom base → eff", f"{top['dom_domenica_base']} → {top['dom_domenica_eff']}")
 
     pattern_data = []
     for i, row in enumerate(top["pattern"], start=1):
-        pattern_data.append({"Sett": f"S{i:02}", **{GIORNI[d]: ("R" if cell else "") for d, cell in enumerate(row)}})
+        pattern_data.append(
+            {"Sett": f"S{i:02}", **{GIORNI[d]: ("R" if cell else "") for d, cell in enumerate(row)}}
+        )
     pattern_df = pd.DataFrame(pattern_data)
 
     stats_rows = []
@@ -272,28 +282,28 @@ if results:
     col_left, col_right = st.columns([1.35, 1])
     with col_left:
         st.markdown("**Pattern settimanale**")
-        st.dataframe(pattern_df, use_container_width=True, height=420)
+        st.dataframe(pattern_df, use_container_width=True, height=420, hide_index=True)
     with col_right:
         st.markdown("**Coperture per giorno**")
-        st.dataframe(stats_df, use_container_width=True)
+        st.dataframe(stats_df, use_container_width=True, hide_index=True)
         st.bar_chart(stats_df.set_index("Giorno")[["Domanda", "In servizio"]])
 
     summary = {
         "Data report": datetime.now().strftime("%Y-%m-%d %H:%M"),
-        "Tentativi fattibili": len(results),
-        "Migliore configurazione": f"N={top['N']} K={top['K']}",
-        "Driver totali top": top["tot_autisti"],
-        "Picco eccedenza top": top["max_extra"],
-        "Totale eccedenza top": top["total_extra"],
+        "Configurazioni fattibili": len(results),
+        "Rotazione selezionata": f"#{selected_pos} — N={top['N']} K={top['K']}",
+        "Driver totali": top["tot_autisti"],
+        "Picco eccedenza": top["max_extra"],
+        "Totale eccedenza": top["total_extra"],
         "Dom base -> eff": f"{top['dom_domenica_base']} -> {top['dom_domenica_eff']}",
         "Fattore riserva": f"{top['riserva_factor']:.3f}",
     }
 
-    pdf_bytes = build_pdf_report(summary, ranking_df, pattern_df.head(35))
+    pdf_bytes = build_pdf_report(summary, ranking_df, pattern_df)
     st.download_button(
-        "Esporta classifica in PDF",
+        "Esporta dettaglio in PDF",
         data=pdf_bytes,
-        file_name=f"report_rotazione_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
+        file_name=f"rotazione_{top['N']}x{top['K']}_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
         mime="application/pdf",
         use_container_width=True,
     )
